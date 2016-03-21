@@ -8,7 +8,8 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
 {
     public class ImplicitlyCreatedCredentialProvider : IProvideCredentials
     {
-        public async Task<string> RedeemTokenAsync(Uri providerId, string username, string accessToken)
+        public async Task<TResult> RedeemTokenAsync<TResult>(Uri providerId, string username, string token,
+            Func<string, TResult> success, Func<TResult> invalidCredentials, Func<TResult> couldNotConnect)
         {
             var concatination = providerId.AbsoluteUri + username;
             var md5 = MD5.Create();
@@ -16,28 +17,27 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
             var md5guid = new Guid(md5data);
             
             const string connectionStringKeyName = "Azure.Authorization.Storage";
-            var context = new BlackBarLabs.Persistence.Azure.DataStores(connectionStringKeyName);
-            var result = default(string);
-            var updatedDocument = false;
-            var saved = await context.AzureStorageRepository.CreateOrUpdateAtomicAsync<CredentialsDocument>(md5guid, (document) =>
-            {
-                updatedDocument = false; // In case of repeat
-                if (string.IsNullOrWhiteSpace(document.AccessToken))
-                {
-                    result = accessToken;
-                    document.AccessToken = accessToken;
-                    updatedDocument = true;
-                    return Task.FromResult(document);
-                }
-                if (String.Compare(document.AccessToken, accessToken, false) == 0)
-                {
-                    result = accessToken;
-                }
-                return Task.FromResult(default(CredentialsDocument));
-            });
-            if (updatedDocument && (!saved))
-                return default(string); // TODO: Throw exception here?
+            var context = new Persistence.Azure.DataStores(connectionStringKeyName);
 
+            var result = await context.AzureStorageRepository.CreateOrUpdateAtomicAsync<TResult, CredentialsDocument>(md5guid,
+                (document, saveDocument) =>
+                {
+                    var tokenHashBytes = SHA512.Create().ComputeHash(Encoding.UTF8.GetBytes(token));
+                    var tokenHash = Convert.ToBase64String(tokenHashBytes);
+                    if (default(CredentialsDocument) == document)
+                    {
+                        saveDocument(new CredentialsDocument()
+                        {
+                            AccessToken = tokenHash,
+                        });
+                        return success(tokenHash);
+                    }
+
+                    if (String.Compare(document.AccessToken, tokenHash, false) == 0)
+                        return success(tokenHash);
+
+                    return invalidCredentials();
+                });
             return result;
         }
     }
