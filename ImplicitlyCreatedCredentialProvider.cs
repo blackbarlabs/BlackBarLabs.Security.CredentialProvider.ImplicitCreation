@@ -20,13 +20,13 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
             var context = new Persistence.Azure.DataStores(connectionStringKeyName);
 
             var result = await context.AzureStorageRepository.CreateOrUpdateAtomicAsync<TResult, CredentialsDocument>(md5guid,
-                (document, saveDocument) =>
+                async (document, saveDocument) =>
                 {
                     var tokenHashBytes = SHA512.Create().ComputeHash(Encoding.UTF8.GetBytes(token));
                     var tokenHash = Convert.ToBase64String(tokenHashBytes);
                     if (default(CredentialsDocument) == document)
                     {
-                        saveDocument(new CredentialsDocument()
+                        await saveDocument(new CredentialsDocument()
                         {
                             AccessToken = tokenHash,
                         });
