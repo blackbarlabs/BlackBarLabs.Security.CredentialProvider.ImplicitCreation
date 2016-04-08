@@ -9,7 +9,7 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
     public class ImplicitlyCreatedCredentialProvider : IProvideCredentials
     {
         public async Task<TResult> RedeemTokenAsync<TResult>(Uri providerId, string username, string token,
-            Func<string, TResult> success, Func<TResult> invalidCredentials, Func<TResult> couldNotConnect)
+            Func<string, TResult> success, Func<string, TResult> invalidCredentials, Func<TResult> couldNotConnect)
         {
             var concatination = providerId.AbsoluteUri + username;
             var md5 = MD5.Create();
@@ -36,7 +36,7 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
                     if (String.Compare(document.AccessToken, tokenHash, false) == 0)
                         return success(tokenHash);
 
-                    return invalidCredentials();
+                    return invalidCredentials("Invalid credentials -   AccessToken: " + document.AccessToken + "   tokenHash: " + tokenHash);
                 });
             return result;
         }
