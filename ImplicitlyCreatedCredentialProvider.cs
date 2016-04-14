@@ -79,7 +79,7 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
 
                     // If it doesn't exist, we can't update it
                     if (default(CredentialsDocument) == document)
-                    {
+                    {   
                         return doesNotExist();
                     }
 
