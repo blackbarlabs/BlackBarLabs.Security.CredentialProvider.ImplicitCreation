@@ -103,5 +103,29 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
             return result;
         }
 
+        public async Task<TResult> GetCredentialsAsync<TResult>(Uri providerId, string username,
+            Func<string, TResult> success, Func<TResult> doesNotExist)
+        {
+            #region User MD5 hash to create a unique key for each providerId and username combination
+
+            var concatination = providerId.AbsoluteUri + username;
+            var md5 = MD5.Create();
+            byte[] md5data = md5.ComputeHash(Encoding.UTF8.GetBytes(concatination));
+            var md5guid = new Guid(md5data);
+
+            #endregion
+
+            // Fetch the document with that key
+
+            const string connectionStringKeyName = "Azure.Authorization.Storage";
+            var context = new Persistence.Azure.DataStores(connectionStringKeyName);
+
+            var result = await context.AzureStorageRepository.FindByIdAsync<CredentialsDocument, TResult>(md5guid, 
+                document => success(document.RowKey), 
+                doesNotExist);
+
+            return result;
+        }
+
     }
 }
