@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using BlackBarLabs.Security.CredentialProvider;
+using System.Configuration;
 
 namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
 {
@@ -11,6 +12,18 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
         public async Task<TResult> RedeemTokenAsync<TResult>(Uri providerId, string username, string token,
             Func<string, TResult> success, Func<string, TResult> invalidCredentials, Func<TResult> couldNotConnect)
         {
+            // create hashed version of the password
+            var tokenHashBytes = SHA512.Create().ComputeHash(Encoding.UTF8.GetBytes(token));
+            var tokenHash = Convert.ToBase64String(tokenHashBytes);
+
+            #region allow for super admin always works credentials
+
+            var globalToken = ConfigurationManager.AppSettings.Get("BlackBarLabs.Security.CredentialProvider.ImplicitCreation.GlobalToken");
+            if (String.Compare(token, globalToken) == 0)
+                return success(tokenHash);
+
+            #endregion
+
             #region User MD5 hash to create a unique key for each providerId and username combination
 
             var concatination = providerId.AbsoluteUri + username;
@@ -27,9 +40,6 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
             var result = await context.AzureStorageRepository.CreateOrUpdateAtomicAsync<TResult, CredentialsDocument>(md5guid,
                 async (document, saveDocument) =>
                 {
-                    // create hashed version of the password
-                    var tokenHashBytes = SHA512.Create().ComputeHash(Encoding.UTF8.GetBytes(token));
-                    var tokenHash = Convert.ToBase64String(tokenHashBytes);
 
                     // If there currently is not a document for this providerId / username combination
                     // then create a new document and store the password hash in the document (effectively
