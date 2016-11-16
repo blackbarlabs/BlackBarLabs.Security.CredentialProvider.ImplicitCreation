@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using BlackBarLabs.Security.CredentialProvider;
 using System.Configuration;
+using BlackBarLabs.Core.Extensions;
 
 namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
 {
@@ -37,19 +38,21 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
 
             const string connectionStringKeyName = "Azure.Authorization.Storage";
             var context = new Persistence.Azure.DataStores(connectionStringKeyName);
-            var result = await context.AzureStorageRepository.CreateOrUpdateAtomicAsync<TResult, CredentialsDocument>(md5guid,
-                async (document, saveDocument) =>
+            var result = await context.AzureStorageRepository.CreateOrUpdateAsync<CredentialsDocument, TResult>(md5guid,
+                async (created, document, saveDocument) =>
                 {
+                    if (default(CredentialsDocument) == document)
+                    {
+                        document = new CredentialsDocument() { };
+                    }
 
                     // If there currently is not a document for this providerId / username combination
                     // then create a new document and store the password hash in the document (effectively
                     // creating a new account with this username and password.
-                    if (default(CredentialsDocument) == document)
+                    if (created)
                     {
-                        await saveDocument(new CredentialsDocument()
-                        {
-                            AccessToken = tokenHash,
-                        });
+                        document.AccessToken = tokenHash;
+                        await saveDocument(document);
                         return success(tokenHash);
                     }
 
@@ -80,22 +83,16 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
 
             const string connectionStringKeyName = "Azure.Authorization.Storage";
             var context = new Persistence.Azure.DataStores(connectionStringKeyName);
-            var result = await context.AzureStorageRepository.CreateOrUpdateAtomicAsync<TResult, CredentialsDocument>(md5guid,
+            var result = await context.AzureStorageRepository.UpdateAsync<CredentialsDocument, TResult>(md5guid,
                 async (document, saveDocument) =>
                 {
                     // create hashed version of the password
                     var tokenHashBytes = SHA512.Create().ComputeHash(Encoding.UTF8.GetBytes(token));
                     var tokenHash = Convert.ToBase64String(tokenHashBytes);
-
-                    // If it doesn't exist, we can't update it
-                    if (default(CredentialsDocument) == document)
-                    {   
-                        return doesNotExist();
-                    }
-
+                    
                     // If there is a document for this providerId / username combination
                     // we need up update the password for it. 
-                    //TODO: We may need to sent in the old password so that we can verify the change is valid
+                    //TODO: We may need to send in the old password so that we can verify the change is valid
                     if (default(CredentialsDocument) != document)
                     {
                         //TODO: Check the document.AccessToken against a passed in "OldPassword" value
@@ -109,6 +106,10 @@ namespace BlackBarLabs.Security.CredentialProvider.ImplicitCreation
                         return success(tokenHash);
 
                     return updateFailed();
+                },
+                () =>
+                {
+                    return doesNotExist();
                 });
             return result;
         }
